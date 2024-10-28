@@ -57,6 +57,8 @@ class UI(MSFluentWindow):
         self.mind.confirmation_needed.connect(self.handle_confirmation_needed)
         # self.mind.confirmation_result.connect(self.handle_confirmation_result)
         self.mind.regenerate_code.connect(self.handle_regenerate_code)
+        with open('correctnes.log', 'w', encoding='utf-8') as l:
+            l.write("")
 
     @pyqtSlot(str)
     def handle_confirmation_needed(self, message):
