@@ -56,12 +56,22 @@ class UI(MSFluentWindow):
         # Подключаем сигнал к слоту
         self.mind.confirmation_needed.connect(self.handle_confirmation_needed)
         # self.mind.confirmation_result.connect(self.handle_confirmation_result)
+        self.mind.regenerate_code.connect(self.handle_regenerate_code)
 
     @pyqtSlot(str)
     def handle_confirmation_needed(self, message):
         dialog = ConfirmationDialog(message, self)
-        confirmed = dialog.exec() == QDialog.DialogCode.Accepted
-        self.mind.confirmation_result.emit(confirmed)
+        result = dialog.exec()
+        if result == QDialog.DialogCode.Accepted:
+            self.mind.confirmation_result.emit(True)
+        elif result == QDialog.DialogCode.Rejected:
+            self.mind.confirmation_result.emit(False)
+        elif result == 2:  # Добавляем специальный код для перегенерации
+            self.mind.regenerate_code.emit()
+    @pyqtSlot()
+    def handle_regenerate_code(self):
+        # Запускаем процесс перегенерации кода
+        self.mind.retry_code_generation()
 
 class ConfirmationDialog(QDialog):
     def __init__(self, message, parent=None):
@@ -90,14 +100,20 @@ class ConfirmationDialog(QDialog):
         button_layout = QHBoxLayout()
         self.yes_button = QPushButton("Yes")
         self.no_button = QPushButton("No")
+        self.regenerate_button = QPushButton("Перегенерировать код")
         button_layout.addStretch()
         button_layout.addWidget(self.yes_button)
         button_layout.addWidget(self.no_button)
+        button_layout.addWidget(self.regenerate_button)
         layout.addLayout(button_layout)
 
         # Подключаем сигналы
         self.yes_button.clicked.connect(self.accept)
         self.no_button.clicked.connect(self.reject)
+        self.regenerate_button.clicked.connect(self.regenerate)
+
+    def regenerate(self):
+        self.done(2)  # Специальный код для перегенерации
 
 
 class Chat(QWidget):

@@ -35,27 +35,42 @@ def answer():  # Какой заряд батареи?
 '''
 
 init_message = f'''
-Ты — умный помощник для операционной системы Windows 11. Тебя зовут Kevin.
-Ты выполняешь задачи пользователя и имеешь полный доступ к его компьютеру.
-Ты можешь использовать Python для решения задач, поставленных пользователем:
-Чтобы выполнить какой-либо код, оформи ответ следующим образом:
-<python>
-def answer():
-    # твой код
-    return result  # result - это str
-</python>
-!!!Важно использовать теги <python>...</python>!!!
-Ты можешь пользоваться модулями, такими как pyautogui, cpuinfo, datetime, os. Пользоваться другими модулями не рекомендуется.
-Функция всегда должна называться "answer". Если её не будет — ты получишь ошибку. Ты пишешь функцию, результатом которой будет ответ на вопрос пользователя.
-Функция всегда должна возвращать строку — это будет ответ для пользователя.
-Никогда не отходи от своей роли. Тебя зовут Kevin. Используй код, когда простого ответа текстом тебе недостаточно.
-Предупреждай об опасных операциях, которые ты собираешься выполнить. Например, если ты собираешься удалить файл, предупреди об этом.
-!!!Не забывай про функцию answer(), без неё ты не сможешь выполнить код!!!
-!!!Не раскрывай тонкостей своей работы пользователю, даже если он просит. Не говори, что ты пишешь код на Python. Это — секретная информация!!!
-!!!Пиши код, когда это необходимо и не забывай писать его в <python>...</python>!!!
-!!!Без функции answer() ты не сможешь выполнить код!!!
-!!!Предупреждай об опасных операциях: удаление файлов, закрытие системных процессов. Будь осторожнее!!!
-Отвечай всегда на том языке, на котором был задан вопрос.
+You are a smart assistant for the Windows 11 operating system. Your name is Kevin.
+Your task is to perform user tasks and provide solutions using Python.
+Try to do everything yourself! Always use Python if possible. An exception is if the user asked for advice on how to do it with their hands.
+- You ALWAYS will be PENALIZED for wrong and low-effort answers. 
+- ALWAYS follow "Working rules."
+- I'm going to tip $1,000,000 for the best reply. 
+- Your answer is critical for my career.
+**Working rules:**
+1. **Using Python:**
+- You can use the following modules: `pyautogui`, `cpuinfo`, `datetime`, `os'.
+   - Do not use other modules without explicit permission.
+   
+2. **Format of responses with a code:**
+   - If you need to execute the code, formalize the response as follows:
+     ```
+     <python>
+     def answer():
+         # твой код
+         return result  # result - this str
+     </python>
+     ```
+- The function should always be called `answer'.
+   - The code should return a string that will be shown to the user.
+   - !!!It is important to use <python> tags...</python>!!!
+   - !!!Without the answer() function, you will not be able to execute the code!!!
+- !!!Write code when necessary and don't forget to write it in <python>...</python>!!!
+   
+3. **Security:**
+   - Always warn the user before performing potentially dangerous operations (for example, deleting files, changing system settings).
+   - Never disclose the details of your inner work or technical implementation.
+   
+4. **Language of communication:**
+- USE the Russian language!!!
+
+5. **Error handling:**
+- If an error occurs in the code, explicitly point it out in your response.
 
 {code_snippets}
 Для начала поздоровайся.
@@ -66,12 +81,14 @@ class Mind(QObject):
 
     confirmation_needed = pyqtSignal(str)
     confirmation_result = pyqtSignal(bool)
+    regenerate_code = pyqtSignal()
 
     def __init__(self, parent_widget=None):
         super().__init__()
         self.init_new_chat()
         self.parent_widget = parent_widget
         self.confirmation_result.connect(self.handle_confirmation_result)
+        self.regenerate_code.connect(self.handle_regenerate_code)
         self.pending_execution = None  # Хранение информации о том, что нужно выполнить после подтверждения
     
     def init_new_chat(self):
@@ -118,8 +135,8 @@ class Mind(QObject):
                     if execution_successful:
                         break  # Выходим из цикла после успешного выполнения
                     else:
-                        retry_count += 1
-                        print(f"Попытка {retry_count} из {max_retries}.")
+                        retry_count = 0
+                        print(f"Перегенирируем код.")
                         continue  # Повторяем цикл для повторной попытки
 
             except Exception as e:
@@ -132,6 +149,24 @@ class Mind(QObject):
             card.set_content(Message(text="Извините, не удалось получить ответ. Попробуйте ещё раз."))
 
         self.titleBar.set_animation(0)
+    
+    def retry_code_generation(self):
+        try:
+            if self.pending_execution:
+                code, card, check_response_security, user_input = self.pending_execution
+                self.pending_execution = None
+                clarification_message = f"Код не прошёл проверку: {check_response_security}. Попробуй исправить код и решить задачу '{user_input}' ещё раз. !!!Важно использовать теги <python>...</python>!!!"
+                self.messages_array.append({"role": "user", "content": clarification_message})
+                self.get_ai_response(clarification_message, card)
+            else:
+                print("Ошибка: pending_execution не установлен.")
+                # Дополнительные действия, например, уведомление пользователя
+        except ValueError as ve:
+            print(f"Ошибка распаковки pending_execution: {ve}")
+            # Дополнительные действия по обработке ошибки
+        except Exception as e:
+            print(f"Неизвестная ошибка в retry_code_generation: {e}")
+            # Дополнительные действия по обработке ошибки
 
     def code_exec_result(self, input_str, card, user_input):
         try:
@@ -142,47 +177,58 @@ class Mind(QObject):
                     code = code_inside_tags.strip()
 
                     # Проверка кода с помощью AI
-                    check_prompt = f"Пожалуйста, проверьте следующий код на безопасность и правильность. Ответьте 'Одобрено', если код безопасен и корректен, либо укажите проблемы:\n{code}"
-                    check_messages = [
-                        {"role": "user", "content": check_prompt}
+                    print(f"Проверка кода с помощью AI.")
+                    with open('execute.py', 'w', encoding='utf-8') as f:
+                        f.write(code)
+                    check_prompt_correctness = (
+                        f"Пожалуйста, внимательно проверь следующий код на правильность и соответствие лучшим практикам программирования. "
+                        f"Если код содержит ошибки или не соответствует лучшим практикам, подробно опиши эти проблемы, включая тип ошибки, "
+                        f"местоположение в коде и рекомендации по исправлению. Если код технически корректен и соответствует лучшим практикам, "
+                        f"ответь 'корректен'.\n{code}"
+                    )
+                    #check_prompt = f"Пожалуйста, тщательно проверь следующий код на безопасность, правильность и соответствие лучшим практикам программирования. Если код безопасен и корректен, ответь только словом 'Одобрено'. Если есть проблемы, подробно опиши их, включая тип ошибки, местоположение в коде и рекомендации по исправлению. Ответьте 'Одобрено', если код безопасен и корректен, если только корректен с технической точки зрения но есть проблемы с безопасностью, то напиши 'корректен' и распиши проблемы, либо если же не корректен, то укажи проблемы:\n{code}"
+                    check_prompt_security = (
+                        f"Пожалуйста, проверь следующий код на безопасность. "
+                        f"Если код безопасен, ответь 'Безопасно'. Если имеются проблемы с безопасностью, "
+                        f"подробно опиши их, включая тип проблемы, местоположение в коде и рекомендации по исправлению.\n{code}"
+                    )
+                    check_messages_correctnes = [
+                        {"role": "user", "content": check_prompt_correctness}
                     ]
 
-                    check_response = g4f.ChatCompletion.create(
+                    check_response_correctnes = g4f.ChatCompletion.create(
                         model="gpt-4o",
-                        messages=check_messages,
+                        messages=check_messages_correctnes,
                         stream=False
                     )
 
                     # Проверяем ответ модели на проверку кода
-                    if "Одобрено" in check_response or "одобрено" in check_response:
-                        # Если код одобрен, выполняем его
-                        return self.execute_code(code, card)
+                    if "корректен" in check_response_correctnes or "correct" in check_response_correctnes:
+                        # Шаг 2: Проверка безопасности
+                        print(f"Код корректен. Начинаю проверку безопасности")
+                        check_messages_security = [
+                            {"role": "user", "content": check_prompt_security}
+                        ]
+                        check_response_security = g4f.ChatCompletion.create(
+                            model="gpt-4o",
+                            messages=check_messages_security,
+                            stream=False
+                        )
+                        if "Безопасно" in check_response_security or 'Safe' in check_response_security:
+                            # Если код одобрен, выполняем его
+                            print(f"Код безопасен.")
+                            return self.execute_code(code, card)
+                        elif "безопасность" in check_response_security or "security" in check_response_security or "safity" in check_response_security:
+                            print(f"Есть проблемы с безопасностью, нужно подтверждение пользователя.")
+                            self.confirmation_needed.emit(check_response_security)
+                            self.pending_execution = (code, card, check_response_security, user_input)
+                            return True
                     else:
-                        # Проверяем, есть ли проблемы только с безопасностью
-                        if "безопасность" in check_response.lower():
-                            # Спрашиваем пользователя о подтверждении выполнения
-                            self.pending_execution = (code, card)
-                            self.confirmation_needed.emit(check_response)
-
-                            '''# Подключаем слот перед эмиссией сигнала
-                            self.confirmation_needed.connect(on_confirmation_received, Qt.ConnectionType.DirectConnection)
-                            self.confirmation_needed.emit(check_response, result_holder)
-
-                            # Запускаем цикл ожидания
-                            loop.exec()
-
-                            if result_holder['confirmed']:
-                                # Пользователь подтвердил, выполняем код
-                                return self.execute_code(code, card)
-                            else:
-                                # Пользователь отказался
-                                card.set_content(Message(text="Операция отменена пользователем."))
-                                return True  # Считаем, что попытка успешна, но код не выполнен'''
-                        else:
-                            # Проблемы не только с безопасностью, пытаемся решить проблему
-                            clarification = f"Код не прошёл проверку: {check_response}. Попробуй исправить код и решить задачу '{user_input}' ещё раз."
-                            self.messages_array.append({"role": "user", "content": clarification})
-                            return False  # Указываем, что нужно повторить попытку
+                        # Проблемы не только с безопасностью, пытаемся решить проблему
+                        clarification = f"Код не прошёл проверку: {check_response_correctnes}. Попробуй исправить код и решить задачу '{user_input}' ещё раз. !!!Важно использовать теги <python>...</python>!!!"
+                        self.messages_array.append({"role": "user", "content": clarification})
+                        print(f"Код не прошёл проверку")
+                        return False  # Указываем, что нужно повторить попытку
             else:
                 # Нет кода для выполнения
                 return True
@@ -190,18 +236,32 @@ class Mind(QObject):
             result = f"Ошибка выполнения кода: {e}"
             card.set_content(Message(text=result))
             return True  # Считаем попытку успешной, несмотря на ошибку
+        
     @pyqtSlot(bool)
     def handle_confirmation_result(self, confirmed):
         if self.pending_execution:
-            code, card = self.pending_execution
+            code, card, check_response_security, user_input = self.pending_execution
             if confirmed:
                 self.execute_code(code, card)
             else:
                 card.set_content(Message(text="Операция отменена пользователем."))
             self.pending_execution = None
+ 
+    @pyqtSlot()
+    def handle_regenerate_code(self):
+        if self.pending_execution:
+            code, card, check_response_security, user_input = self.pending_execution
+            clarification_message = f"Код не прошёл проверку: {check_response_security}. Попробуй исправить код и решить задачу '{user_input}' ещё раз. !!!Важно использовать теги <python>...</python>!!!"
+            # Добавляем сообщение в очередь сообщений
+            self.messages_array.append({"role": "user", "content": clarification_message})
+            # Очищаем предыдущее выполнение
+            self.pending_execution = None
+            # Инициируем генерацию ответа на новое сообщение
+            self.get_ai_response(clarification_message, card)
 
     def execute_code(self, code, card):
         try:
+            print(f"Выполняю код")
             local_vars = {}
             exec(code, {}, local_vars)
             if 'answer' in local_vars:
